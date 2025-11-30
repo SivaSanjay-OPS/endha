@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>LoanFlow — Single File (Admin / Lender / Borrower) v7</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{ --bg1:#071028; --bg2:#071831; --card:#07152a; --accent:#7c3aed; --muted:#94a3b8; --glass: rgba(255,255,255,0.03); --success:#60c78d; --error:#ff6b6b }
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;color:#e6eef8;background:linear-gradient(135deg,var(--bg1),var(--bg2));}
+.app{display:flex;min-height:100vh;}
+nav.sidebar{width:300px;padding:16px;background:linear-gradient(180deg,var(--card),rgba(255,255,255,0.01));backdrop-filter:blur(6px);border-right:1px solid rgba(255,255,255,0.03);display:flex;flex-direction:column}
+.brand{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+.logo{width:46px;height:46px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#06b6d4);display:flex;align-items:center;justify-content:center;font-weight:800}
+.role-switch{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.role-btn{padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--muted);cursor:pointer}
+.role-btn.active{background:rgba(255,255,255,0.03);color:white}
+.nav-item{padding:10px;border-radius:8px;color:var(--muted);cursor:pointer;margin-bottom:6px}
+.nav-item.active{background:rgba(255,255,255,0.03);color:white}
+.main{flex:1;padding:12px;overflow:auto}
+.panel{background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);padding:12px;border-radius:10px;margin-bottom:12px;border:1px solid rgba(255,255,255,0.02)}
+table{width:100%;border-collapse:collapse;color:#e6eef8;margin-bottom:10px}
+th,td{padding:8px;border-bottom:1px dashed rgba(255,255,255,0.04);font-size:13px}
+.btn{padding:8px 10px;border-radius:8px;border:0;cursor:pointer}
+.btn.primary{background:linear-gradient(90deg,var(--accent),#06b6d4);color:white}
+.btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+.small{font-size:12px;color:var(--muted)}
+#dropZone{padding:12px;border:2px dashed rgba(255,255,255,0.06);border-radius:8px;text-align:center;color:var(--muted);cursor:pointer}
+.modal-backdrop{position:fixed;inset:0;background:rgba(3,7,18,0.7);display:none;align-items:center;justify-content:center;z-index:2000}
+.modal{background:#071028;border-radius:10px;padding:14px;max-width:900px;width:94%;max-height:80vh;overflow:auto;border:1px solid rgba(255,255,255,0.04)}
+.pill{display:inline-block;padding:6px 8px;border-radius:999px;background:rgba(255,255,255,0.03);margin-right:6px;font-size:12px}
+.flex{display:flex;gap:8px;align-items:center}
+/* responsive */
+@media(max-width:900px){ nav.sidebar{width:100%;position:sticky;top:0;display:flex;flex-direction:row;overflow:auto;height:auto} .app{flex-direction:column} .main{padding:8px} .role-switch{display:none} .nav-item{display:none} .nav-item.mobile-visible{display:block} }
+.toast-wrap{position:fixed;right:12px;bottom:12px;z-index:3000}
+.toast{background:rgba(0,0,0,0.45);padding:10px;border-radius:8px;color:white;margin-top:6px}
+.input, input, select, textarea{width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+</style>
+</head>
+<body>
+  <div class="app">
+    <nav class="sidebar" aria-label="main nav">
+      <div class="brand"><div class="logo">L</div><div><div style="font-weight:700">LoanFlow</div><div class="small">Admin · Lender · Borrower</div></div></div>
+      <div class="role-switch" id="roleSwitch">
+        <button class="role-btn active" data-role="admin">Admin</button>
+        <button class="role-btn" data-role="lender">Lender</button>
+        <button class="role-btn" data-role="borrower">Borrower</button>
+      </div>
+      <div id="navList">
+        <div class="nav-item active" data-module="dashboard">Dashboard</div>
+        <div class="nav-item" data-module="loans">Loans</div>
+        <div class="nav-item" data-module="documents">Documents</div>
+        <div class="nav-item" data-module="transactions">Transactions</div>
+        <div class="nav-item" data-module="reports">Reports</div>
+      </div>
+      <div style="margin-top:auto;font-size:12px;color:var(--muted)">Signed in as <b id="signedIn">demo_user</b></div>
+    </nav>
+
+    <main class="main">
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:12px">
+        <div class="panel" style="flex:1;min-width:220px"><div class="small">Role:</div><div id="currentRole" style="font-weight:700">Admin</div></div>
+        <div style="width:260px" class="panel"><div style="font-weight:700;font-size:13px;margin-bottom:6px">Quick CAPTCHA (demo)</div><div id="captchaBox" class="small">Sample</div></div>
+      </div>
+
+      <section id="dashboardView" class="view active">
+        <div class="panel" style="display:flex;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:160px"><div class="small">Total Loaned</div><div id="totalLoan" style="font-weight:700">₹0</div></div>
+          <div style="width:160px"><div class="small">Active Loans</div><div id="activeLoans" style="font-weight:700">0</div></div>
+          <div style="width:160px"><div class="small">Avg Credit</div><div id="avgScore" style="font-weight:700">0</div></div>
+        </div>
+
+        <div class="panel" style="margin-top:12px">
+          <h3 style="margin:0 0 8px 0">Recent Loans</h3>
+          <table id="loansTable"><thead><tr><th>ID</th><th>Borrower</th><th>Amount</th><th>Term</th><th>Status</th><th>Files</th></tr></thead><tbody></tbody></table>
+        </div>
+      </section>
+
+      <section id="loansView" class="view" style="display:none">
+        <div class="panel"><h3 style="margin:0 0 8px 0">All Loans</h3><table id="allLoansTable"><thead><tr><th>ID</th><th>Borrower</th><th>Amount</th><th>EMI</th><th>Progress</th><th>Files</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
+      </section>
+
+      <section id="documentsView" class="view" style="display:none">
+        <div class="panel" style="display:grid;grid-template-columns:1fr 360px;gap:12px">
+          <div>
+            <h3 style="margin:0 0 8px 0">All Documents (Inbox • Forwarded • Decisions)</h3>
+            <div class="small muted" style="margin-bottom:8px">Consolidated: every document sent for review. Files persist with records so Admin/Lender can view filenames.</div>
+            <table id="allDocsTable"><thead><tr><th>Source</th><th>Applicant</th><th>Recipient</th><th>Files</th><th>Amount</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead><tbody></tbody></table>
+          </div>
+
+          <div>
+            <div class="panel">
+              <h4 style="margin:0 0 8px 0">Upload (shared drop zone)</h4>
+              <div id="dropZone">Drag & drop files here or click to upload (max 10 files, 5MB each)</div>
+              <ul id="fileList" style="list-style:none;padding-left:0;margin-top:8px"></ul>
+              <div style="margin-top:10px">
+                <label class="small">Loan Purpose</label>
+                <input id="docLoanPurpose" class="input" placeholder="e.g., Business expansion" />
+                <label class="small" style="margin-top:8px">Requested Amount</label>
+                <input id="docRequestedAmount" class="input" type="number" />
+                <div style="display:flex;gap:8px;margin-top:10px">
+                  <button class="btn primary" id="postToAdmin">Post to Admin (for sanction)</button>
+                  <button class="btn ghost" id="sendToLender">Send to Lender</button>
+                  <button class="btn" id="clearUpload">Clear</button>
+                </div>
+                <div class="small muted" style="margin-top:6px">"Post to Admin" sends request directly to Admin (shows amount). Lender/Admin can also create loans using the 'Create Loan' form below (visible to Lender/Admin).</div>
+              </div>
+            </div>
+
+            <div class="panel" id="createLoanPanel" style="display:none">
+              <h4 style="margin:0 0 8px 0">Create Loan (Lender / Admin)</h4>
+              <label class="small">Select Borrower</label>
+              <select id="createLoanBorrower" class="input"></select>
+              <label class="small" style="margin-top:8px">Amount</label>
+              <input id="createLoanAmount" class="input" type="number" />
+              <label class="small" style="margin-top:8px">Term (months)</label>
+              <input id="createLoanTerm" class="input" type="number" />
+              <div style="display:flex;gap:8px;margin-top:10px"><button class="btn primary" id="createLoanBtn">Create Loan</button></div>
+              <div class="small muted" style="margin-top:6px">Create a loan and attach files from the shared drop zone.</div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3 style="margin:0 0 8px 0">Lender Inbox</h3>
+          <table id="lenderInbox"><thead><tr><th>From</th><th>Files</th><th>Loan Amt</th><th>Action</th></tr></thead><tbody></tbody></table>
+        </div>
+
+        <div class="panel">
+          <h3 style="margin:0 0 8px 0">Admin Review Queue</h3>
+          <table id="docReviewTable"><thead><tr><th>Applicant</th><th>Files</th><th>Amount</th><th>Action</th></tr></thead><tbody></tbody></table>
+        </div>
+
+      </section>
+
+      <section id="transactionsView" class="view" style="display:none"><div class="panel"><h3 style="margin:0 0 8px 0">Transactions</h3><table id="transactionsAll"><thead><tr><th>TxID</th><th>Loan</th><th>User</th><th>Amount</th><th>Type</th><th>Date</th></tr></thead><tbody></tbody></table></div></section>
+
+      <section id="reportsView" class="view" style="display:none"><div class="panel"><h3 style="margin:0 0 8px 0">Financial Reports</h3><canvas id="reportChart" height="200"></canvas></div></section>
+
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="modalBackdrop"><div class="modal" role="dialog" aria-modal="true"><div style="display:flex;justify-content:space-between;align-items:center"><h3 id="modalTitle">Files</h3><div class="flex"><button class="btn ghost" id="downloadFileList">Download file list</button><button class="btn" id="closeModal">Close</button></div></div><div id="modalBody" style="margin-top:12px"></div></div></div>
+
+  <div class="toast-wrap" id="toasts"></div>
+
+<script>
+// Single-file v7 — fixes & responsiveness + ensured borrower files reach admin queue reliably
+const STORAGE_KEY='loanflow:v7';
+function saveState(s){ localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
+function loadState(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)) }catch(e){ return null } }
+function guid(pref='ID'){ return pref+Math.floor(Math.random()*1000000) }
+const TOAST = (msg,type='info',t=3000)=>{ const wrap=document.getElementById('toasts'); const el=document.createElement('div'); el.className='toast'; el.style.background = type==='error'? 'rgba(128,14,14,0.9)': type==='success'? 'rgba(6,76,55,0.9)':'rgba(0,0,0,0.45)'; el.innerText=msg; wrap.appendChild(el); setTimeout(()=>{ el.style.opacity=0; setTimeout(()=>el.remove(),300) }, t); };
+
+const DEFAULT={ users:[ {id:1,name:'Asha Patel',role:'borrower',credit:720},{id:2,name:'Ravi Kumar',role:'borrower',credit:640},{id:3,name:'LenderCorp',role:'lender',credit:800},{id:99,name:'Admin',role:'admin',credit:900} ], loans:[], txns:[], docs:[], inbox:[], offers:[], approvalLog:[] };
+let appState = loadState() || DEFAULT; saveState(appState);
+let runtime = { role:'admin', userId:99, uploadedFiles:[] };
+const $ = id=>document.getElementById(id);
+$('signedIn').innerText='demo_user'; $('currentRole').innerText='Admin';
+
+function setActiveModule(m){ document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.module===m)); document.querySelectorAll('.view').forEach(v=>v.style.display='none'); const v=document.getElementById(m+'View'); if(v) v.style.display='block'; renderAll(); }
+document.getElementById('navList').addEventListener('click', e=>{ const it=e.target.closest('.nav-item'); if(!it) return; setActiveModule(it.dataset.module); });
+
+// role switch
+document.getElementById('roleSwitch').addEventListener('click', e=>{ const btn=e.target.closest('.role-btn'); if(!btn) return; document.querySelectorAll('.role-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); runtime.role=btn.dataset.role; const user=appState.users.find(u=>u.role===runtime.role)||appState.users[0]; runtime.userId=user.id; $('currentRole').innerText=runtime.role.charAt(0).toUpperCase()+runtime.role.slice(1); $('signedIn').innerText=user.name; $('createLoanPanel').style.display=(runtime.role==='lender'||runtime.role==='admin')?'block':'none'; renderAll(); });
+
+function showCaptchaHint(){ const a=Math.floor(Math.random()*9)+1,b=Math.floor(Math.random()*9)+1; $('captchaBox').innerText=`Sample CAPTCHA (demo): ${a} + ${b} = ?`; } showCaptchaHint();
+
+// dropzone logic
+const DZ=$('dropZone'); DZ.addEventListener('click', ()=>{ const ip=document.createElement('input'); ip.type='file'; ip.multiple=true; ip.accept='.pdf,image/png,image/jpeg'; ip.onchange=e=>handleFiles(e.target.files); ip.click(); });
+DZ.addEventListener('dragover', e=>{ e.preventDefault(); DZ.style.borderColor='rgba(255,255,255,0.2)'; }); DZ.addEventListener('dragleave', e=>{ DZ.style.borderColor=''; }); DZ.addEventListener('drop', e=>{ e.preventDefault(); handleFiles(e.dataTransfer.files); });
+function handleFiles(list){ const allowed=['application/pdf','image/png','image/jpeg']; for(const f of list){ if(runtime.uploadedFiles.length>=10){ TOAST('Max 10 files allowed','error'); break; } if(f.size>5*1024*1024){ TOAST(`${f.name} exceeds 5MB`,'error'); continue; } runtime.uploadedFiles.push({name:f.name,size:f.size,type:f.type}); } renderFileList(); }
+function renderFileList(){ const ul=$('fileList'); ul.innerHTML=''; runtime.uploadedFiles.forEach((f,i)=>{ const li=document.createElement('li'); li.style.padding='6px 0'; li.innerHTML=`<strong>${f.name}</strong> <span class="small" style="margin-left:8px">${Math.round(f.size/1024)} KB</span> <button class="btn ghost" style="float:right" onclick="removeFile(${i})">Remove</button>`; ul.appendChild(li); }); }
+window.removeFile = i=>{ runtime.uploadedFiles.splice(i,1); renderFileList(); };
+
+// POST to Admin — ensure amount numeric; create doc record and admin queue entry
+$('postToAdmin').addEventListener('click', ()=>{
+  if(runtime.role!=='borrower'){ TOAST('Switch to Borrower to post to Admin','error'); return; }
+  if(runtime.uploadedFiles.length===0){ TOAST('Attach files first','error'); return; }
+  // simple captcha prompt to simulate integration
+  const a=Math.floor(Math.random()*9)+1,b=Math.floor(Math.random()*9)+1; const ans=prompt(`CAPTCHA — to post to admin, what is ${a} + ${b}?`,''); if(ans===null) return; if(Number(ans)!==a+b){ TOAST('Incorrect CAPTCHA','error'); return; }
+  const raw = $('docRequestedAmount').value; const amt = Number(raw);
+  if(!Number.isFinite(amt) || amt < 1000){ TOAST('Enter a valid numeric amount ≥ 1,000','error'); return; }
+  const purpose = ($('docLoanPurpose').value||'').trim();
+  const fileNames = runtime.uploadedFiles.map(f=>f.name);
+  const doc = { id:guid('DOC'), from:runtime.userId, to: appState.users.find(u=>u.role==='admin').id, files: fileNames, amount: amt, purpose, status:'pending', date:new Date().toISOString() };
+  appState.docs.push(doc);
+  // also add to admin inbox queue
+  appState.inbox.push({ id:guid('IN'), type:'to_admin', docId:doc.id, fromApplicant: runtime.userId, files:fileNames, amount:amt, purpose, date:new Date().toISOString() });
+  // clear upload buffer
+  runtime.uploadedFiles=[]; renderFileList(); saveState(appState); TOAST('Posted to admin — awaiting review','success'); renderAll();
+});
+
+// Send to Lender (borrower)
+$('sendToLender').addEventListener('click', ()=>{
+  if(runtime.role!=='borrower'){ TOAST('Switch to Borrower to send docs','error'); return; }
+  if(runtime.uploadedFiles.length===0){ TOAST('Attach files first','error'); return; }
+  const a=Math.floor(Math.random()*9)+1,b=Math.floor(Math.random()*9)+1; const ans=prompt(`CAPTCHA — to send to lender, what is ${a} + ${b}?`,''); if(ans===null) return; if(Number(ans)!==a+b){ TOAST('Incorrect CAPTCHA','error'); return; }
+  const raw = $('docRequestedAmount').value; const amt = Number(raw);
+  if(!Number.isFinite(amt) || amt < 1000){ TOAST('Enter a valid numeric amount ≥ 1,000','error'); return; }
+  const lender = appState.users.find(u=>u.role==='lender'); if(!lender){ TOAST('No lender configured','error'); return; }
+  const fileNames = runtime.uploadedFiles.map(f=>f.name);
+  const rec = { id:guid('IN'), toLender: lender.id, fromApplicant: runtime.userId, files:fileNames, amount:amt, purpose: $('docLoanPurpose').value||'', date:new Date().toISOString() };
+  appState.inbox.push(rec);
+  runtime.uploadedFiles=[]; renderFileList(); saveState(appState); TOAST('Sent to lender','success'); renderAll();
+});
+
+// clear
+$('clearUpload').addEventListener('click', ()=>{ runtime.uploadedFiles=[]; renderFileList(); });
+
+// create loan by lender/admin using files in dropzone
+$('createLoanBtn').addEventListener('click', ()=>{
+  if(!(runtime.role==='lender'||runtime.role==='admin')){ TOAST('Only Lender/Admin can create loans','error'); return; }
+  const borrowerId = Number($('createLoanBorrower').value);
+  const amt = Number($('createLoanAmount').value);
+  const term = Number($('createLoanTerm').value);
+  if(!borrowerId || !amt || !term){ TOAST('Provide borrower, amount and term','error'); return; }
+  if(!confirm('Create loan? (In live app CAPTCHA/verification required)')) return;
+  const loan = { id:guid('L'), borrowerId, amount:amt, term, createdBy: runtime.userId, files: runtime.uploadedFiles.map(f=>f.name), status:'active', createdAt:new Date().toISOString(), remaining:amt };
+  appState.loans.push(loan); // also record doc mapping
+  appState.docs.push({ id:guid('DOC'), from: runtime.userId, to: borrowerId, files: loan.files, amount:amt, purpose: 'Created by Lender/Admin', status:'attached', date:new Date().toISOString() });
+  runtime.uploadedFiles=[]; renderFileList(); saveState(appState); TOAST('Loan created','success'); renderAll();
+});
+
+// Admin review: approve or reject docs
+function adminApproveDoc(inboxId){ if(runtime.role!=='admin'){ TOAST('Only admin can approve here','error'); return; } const rec = appState.inbox.find(i=>i.id===inboxId); if(!rec) return; if(!confirm('Approve this application? (CAPTCHA required)')) return; const a=Math.floor(Math.random()*9)+1,b=Math.floor(Math.random()*9)+1; const ans=prompt(`CAPTCHA — to approve, what is ${a} + ${b}?`,''); if(ans===null) return; if(Number(ans)!==a+b){ TOAST('Incorrect CAPTCHA','error'); return; }
+  // create loan from the record
+  const loan = { id:guid('L'), borrowerId: rec.fromApplicant, amount: rec.amount, term: 12, createdBy: runtime.userId, files: rec.files, status:'approved', createdAt:new Date().toISOString(), remaining:rec.amount };
+  appState.loans.push(loan);
+  // mark doc items
+  appState.docs.filter(d=>d.id===rec.docId).forEach(d=>d.status='approved');
+  appState.approvalLog.push({id:guid('AP'), inboxId, loanId:loan.id, action:'approved', by:runtime.userId, at:new Date().toISOString()});
+  // remove from inbox
+  appState.inbox = appState.inbox.filter(i=>i.id!==inboxId);
+  saveState(appState); TOAST('Application approved, loan created','success'); renderAll(); }
+
+function adminRejectDoc(inboxId){ if(runtime.role!=='admin'){ TOAST('Only admin can reject here','error'); return; } const rec = appState.inbox.find(i=>i.id===inboxId); if(!rec) return; const reason = prompt('Reason for rejection'); if(reason===null) return; appState.approvalLog.push({id:guid('AP'), inboxId, action:'rejected', by:runtime.userId, reason, at:new Date().toISOString()}); appState.inbox = appState.inbox.filter(i=>i.id!==inboxId); // mark doc
+  appState.docs.filter(d=>d.id===rec.docId).forEach(d=>d.status='rejected'); saveState(appState); TOAST('Application rejected','success'); renderAll(); }
+
+// render helpers
+function renderAll(){ renderDashboard(); renderLoansTable(); renderDocs(); renderInbox(); renderLenderInbox(); renderCreateLoanBorrowers(); renderReports(); }
+
+function renderDashboard(){ const total = appState.loans.reduce((s,L)=>s+ (L.amount||0),0); const active = appState.loans.filter(l=>l.status==='active' || l.status==='approved').length; const avgCredit = Math.round(appState.users.reduce((s,u)=>s+u.credit,0)/appState.users.length) || 0; $('totalLoan').innerText='₹'+total; $('activeLoans').innerText=active; $('avgScore').innerText=avgCredit; const tbody=$('loansTable').querySelector('tbody'); tbody.innerHTML=''; appState.loans.slice().reverse().forEach(l=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${l.id}</td><td>${appState.users.find(u=>u.id===l.borrowerId)?.name||l.borrowerId}</td><td>₹${l.amount}</td><td>${l.term||'-'}</td><td>${l.status}</td><td>${(l.files||[]).map(f=>`<span class="pill">${f}</span>`).join(' ')}</td>`; tbody.appendChild(tr); }); }
+
+function renderLoansTable(){ const tbody=$('allLoansTable').querySelector('tbody'); tbody.innerHTML=''; appState.loans.forEach(l=>{ const emi = Math.round((l.amount/ (l.term||12))||0); const tr=document.createElement('tr'); tr.innerHTML=`<td>${l.id}</td><td>${appState.users.find(u=>u.id===l.borrowerId)?.name||l.borrowerId}</td><td>₹${l.amount}</td><td>₹${emi}</td><td>${Math.round(((l.amount - (l.remaining||0))/l.amount||0)*100)||0}%</td><td>${(l.files||[]).map(f=>`<span class="pill">${f}</span>`).join(' ')}</td><td><button class="btn ghost" onclick="viewLoan('${l.id}')">View</button></td>`; tbody.appendChild(tr); }); }
+
+window.viewLoan = id=>{ const loan = appState.loans.find(l=>l.id===id); if(!loan) return; const modal=$('modalBackdrop'); $('modalTitle').innerText = `Loan ${loan.id} • ₹${loan.amount}`; const body = $('modalBody'); body.innerHTML = `<div><strong>Borrower:</strong> ${appState.users.find(u=>u.id===loan.borrowerId)?.name||loan.borrowerId}</div><div style="margin-top:8px"><strong>Files:</strong> ${(loan.files||[]).map(f=>`<div class="small">${f}</div>`).join('')}</div><div style="margin-top:8px"><strong>Status:</strong> ${loan.status}</div>`; modal.style.display='flex'; }
+$('closeModal').addEventListener('click', ()=>$('modalBackdrop').style.display='none');
+
+function renderDocs(){ const tbody=$('allDocsTable').querySelector('tbody'); tbody.innerHTML=''; appState.docs.slice().reverse().forEach(d=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${d.from}</td><td>${appState.users.find(u=>u.id===d.from)?.name||d.from}</td><td>${appState.users.find(u=>u.id===d.to)?.name||d.to}</td><td>${(d.files||[]).map(f=>`<span class="pill">${f}</span>`).join(' ')}</td><td>₹${d.amount||0}</td><td>${d.status||'pending'}</td><td>${new Date(d.date).toLocaleDateString()}</td><td>${d.status==='pending'? `<button class="btn primary" onclick="openDocReview('${d.id}')">Review</button>` : ''}</td>`; tbody.appendChild(tr); }); }
+
+function renderInbox(){ const tbody=$('docReviewTable').querySelector('tbody'); tbody.innerHTML=''; // admin review queue uses appState.inbox
+  appState.inbox.filter(i=>i.type==='to_admin').forEach(i=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${appState.users.find(u=>u.id===i.fromApplicant)?.name||i.fromApplicant}</td><td>${(i.files||[]).map(f=>`<span class="pill">${f}</span>`).join(' ')}</td><td>₹${i.amount}</td><td><button class="btn primary" onclick="adminApproveDoc('${i.id}')">Approve</button> <button class="btn ghost" onclick="adminRejectDoc('${i.id}')">Reject</button></td>`; tbody.appendChild(tr); }); }
+
+function renderLenderInbox(){ const tbody=$('lenderInbox').querySelector('tbody'); tbody.innerHTML=''; appState.inbox.filter(i=>i.toLender).forEach(i=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${appState.users.find(u=>u.id===i.fromApplicant)?.name||i.fromApplicant}</td><td>${(i.files||[]).map(f=>`<span class="pill">${f}</span>`).join(' ')}</td><td>₹${i.amount}</td><td><button class="btn primary" onclick="TOAST('Accept in demo','success')">Accept</button></td>`; tbody.appendChild(tr); }); }
+
+function renderCreateLoanBorrowers(){ const sel=$('createLoanBorrower'); sel.innerHTML=''; appState.users.filter(u=>u.role==='borrower').forEach(b=>{ const opt=document.createElement('option'); opt.value=b.id; opt.innerText=b.name; sel.appendChild(opt); }); }
+
+function renderReports(){ const ctx = $('reportChart').getContext('2d'); const labels = appState.loans.map(l=>l.id); const data = appState.loans.map(l=>l.amount); if(window.__chart) window.__chart.destroy(); window.__chart = new Chart(ctx,{type:'bar',data:{labels, datasets:[{label:'Loan Amount',data}]}, options:{responsive:true, plugins:{legend:{display:false}}}}); }
+
+function renderReports(){ try{ renderReports; }catch(e){} const ctx = $('reportChart'); if(!ctx) return; try{ const chart = ctx.getContext('2d'); const labels = appState.loans.map(l=>l.id); const data = appState.loans.map(l=>l.amount); if(window.__reportChart) window.__reportChart.destroy(); window.__reportChart = new Chart(chart,{type:'bar',data:{labels, datasets:[{label:'Loan Amount',data}]}, options:{responsive:true, plugins:{legend:{display:false}}}}); }catch(e){ console.warn(e); } }
+
+// open doc review modal
+window.openDocReview = docId=>{ const doc = appState.docs.find(d=>d.id===docId); if(!doc) return; const modal=$('modalBackdrop'); $('modalTitle').innerText = `Application ${doc.id} • ₹${doc.amount}`; const body=$('modalBody'); body.innerHTML = `<div><strong>Applicant:</strong> ${appState.users.find(u=>u.id===doc.from)?.name||doc.from}</div><div style="margin-top:8px"><strong>Files:</strong> ${(doc.files||[]).map(f=>`<div class="small">${f}</div>`).join('')}</div><div style="margin-top:8px"><button class="btn primary" onclick="adminApproveDocByDoc('${doc.id}')">Approve & Create Loan</button> <button class="btn ghost" onclick="adminRejectDocByDoc('${doc.id}')">Reject</button></div>`; modal.style.display='flex'; }
+
+window.adminApproveDocByDoc = docId=>{ const doc = appState.docs.find(d=>d.id===docId); if(!doc) return; // map to inbox entry
+  const inbox = appState.inbox.find(i=>i.docId===docId); if(inbox) adminApproveDoc(inbox.id); else { // create loan directly
+    if(!confirm('Approve this application and create loan?')) return; const loan={ id:guid('L'), borrowerId: doc.from, amount: doc.amount, term:12, createdBy:runtime.userId, files: doc.files, status:'approved', createdAt:new Date().toISOString(), remaining:doc.amount }; appState.loans.push(loan); doc.status='approved'; appState.approvalLog.push({id:guid('AP'), docId, loanId:loan.id, action:'approved', by:runtime.userId, at:new Date().toISOString()}); saveState(appState); TOAST('Approved and loan created','success'); renderAll(); $('modalBackdrop').style.display='none'; } }
+
+window.adminRejectDocByDoc = docId=>{ const doc = appState.docs.find(d=>d.id===docId); if(!doc) return; const reason = prompt('Reason for rejection'); if(reason===null) return; doc.status='rejected'; appState.approvalLog.push({id:guid('AP'), docId, action:'rejected', by:runtime.userId, reason, at:new Date().toISOString()}); saveState(appState); TOAST('Rejected','success'); renderAll(); $('modalBackdrop').style.display='none'; }
+
+// initial render
+renderAll();
+
+// fix: ensure responsiveness and distinct visuals per panel — done via CSS and different panels
+// usage notes: reset localStorage if needed via localStorage.removeItem('loanflow:v7') in console
+</script>
+</body>
+</html>
